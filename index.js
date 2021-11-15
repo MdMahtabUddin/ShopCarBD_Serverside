@@ -26,77 +26,85 @@ async function run() {
 
         await client.connect();
         const database = client.db('shopCart')
-        const packagesCollection = database.collection("allProducts");
-        const bookingCollection = database.collection("allShopping");
+        const productsCollection = database.collection("allProducts");
+        const reviewsCollection = database.collection("allReviews");
+        const ordersCollection = database.collection("allOrders");
+        const usersCollection = database.collection("allUsers");
         console.log('Mongodb Connect successfully!');
 
-        // GET API
-        app.get('/packages', async (req, res) => {
+        // get all products
+        app.get('/products', async (req, res) => {
 
-            const cursor = packagesCollection.find({})
+            const cursor = productsCollection.find({})
             const packages = await cursor.toArray();
             res.send(packages);
+        })
+
+        // get all orders
+        app.get('/allOrders', async (req, res) => {
+            const cursor = ordersCollection.find({})
+            const orders = await cursor.toArray();
+            res.send(orders)
+        })
+
+        // add Product
+        app.post('/addProduct', async (req, res) => {
+            const productDetails = req.body;
+            const result = await productsCollection.insertOne(productDetails);
+            res.send(result);
 
         })
 
-        // GET Single Service
-        app.get('/packages/:packageId', async (req, res) => {
-            const id = req.params.packageId;
-            console.log('getting specific package', id);
-            const query = { _id: ObjectId(id) };
-            const package = await packagesCollection.findOne(query);
-            res.json(package);
+        // add Place Order details
+        app.post('/addOrder', async (req, res) => {
+            const orderDetails = req.body;
+            const result = await ordersCollection.insertOne(orderDetails);
+            res.send(result);
         })
 
-        // GET API - All Bookings
-        app.get('/allBooking', async (req, res) => {
-
-            const cursor = bookingCollection.find({})
-            const allBooking = await cursor.toArray();
-            res.send(allBooking);
-
+        // add Review
+        app.post('/addReview', async (req, res) => {
+            const review = req.body;
+            const result = await reviewsCollection.insertOne(review);
+            res.send(result);
         })
 
-        // GET API - My Bookings / Find Specific user booking
-        app.get('/myBooking', (req, res) => {
-            bookingCollection.find({ email: req.query.email })
+        // get All Review
+        app.get('/reviews', async (req, res) => {
+            // const cursor = reviewsCollection.find({})
+            // const cursor = reviewsCollection.find({}).sort({ _id: -1 }).limit(10)
+            const cursor = reviewsCollection.find({}).sort({ _id: -1 })
+            const result = await cursor.toArray();
+            res.send(result);
+        })
+
+        // find specific order by email
+        app.get('/myOrders', (req, res) => {
+            ordersCollection.find({ email: req.query.email })
                 .toArray((err, documents) => {
                     res.send(documents)
                 })
         })
 
-
-        // add package POST / INSERT API
-        app.post('/addPackage', async (req, res) => {
-            const packageDetails = req.body;
-            console.log('hit the post api', packageDetails);
-
-            const result = await packagesCollection.insertOne(packageDetails);
-            console.log(result);
-
+        // delete user order
+        app.delete('/allOrders/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: ObjectId(id) }
+            const result = await ordersCollection.deleteOne(query);
             res.json(result);
 
+            if (result.deletedCount === 1) {
+                console.log("Successfully deleted one document.");
+            } else {
+                console.log("No documents matched the query. Deleted 0 documents.");
+            }
         })
 
-        // add booking POST / INSERT API
-        app.post('/addBooking', async (req, res) => {
-            const bookingDetails = req.body;
-            console.log('booking data added', bookingDetails);
-
-            const result = await bookingCollection.insertOne(bookingDetails);
-            console.log(result);
-
-            res.json(result);
-
-        })
-
-
-        // DELETE API
-        app.delete('/myBooking/:id', async (req, res) => {
+        // delete product from the database
+        app.delete('/products/:id', async (req, res) => {
             const id = req.params.id;
-
-            const query = { _id: ObjectId(id) };
-            const result = await bookingCollection.deleteOne(query);
+            const query = { _id: ObjectId(id) }
+            const result = await productsCollection.deleteOne(query)
             res.json(result);
 
             if (result.deletedCount === 1) {
@@ -107,22 +115,76 @@ async function run() {
         })
 
 
-        
+        // order status update | way 1
+        // app.put("/statusUpdate/:id", async (req, res) => {
+        //     const filter = { _id: ObjectId(req.params.id) };
+        //     const result = await ordersCollection.updateOne(filter, {
+        //         $set: {
+        //             status: req.body.newStatus,
+        //         },
+        //     });
+        //     res.send(result);
+        //     console.log(result);
+        // });
 
-        // UPDATE order 
-        app.put('/allBooking/:id', (req, res) => {
-            const filter = { _id: ObjectId(req.params.id) }
-            bookingCollection.updateOne(filter, {
+
+        // order status update | way 2
+        app.put("/statusUpdate/:id", async (req, res) => {
+            console.log(req.params.id);
+            const filter = { _id: ObjectId(req.params.id) };
+            const result = await ordersCollection.updateOne(filter, {
                 $set: {
-                    currentStatus: 'Approved'
-                }
-            })
-                .then((result) => {
-                    res.send(result)
-                })
+                    status: "Shipped",
+                },
+            });
+            res.send(result);
+            console.log(result);
+        });
+
+
+
+        // add user
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const result = await usersCollection.insertOne(user);
+            res.json(result);
+            console.log(result);
         })
 
-        
+        // update user collection when new user login throw google, and don't store duplicate
+        app.put('/users', async (req, res) => {
+            const user = req.body;
+            const filter = { email: user.email };
+            const options = { upsert: true };
+            const updateDoc = { $set: user };
+            const result = await usersCollection.updateOne(filter, updateDoc, options);
+            res.json(result);
+        })
+
+        // make admin by updating user role
+        app.put('/users/admin', async (req, res) => {
+            const user = req.body;
+            console.log('put', user);
+            const filter = { email: user.email };
+            const updateDoc = { $set: { role: 'admin' } }
+            const result = await usersCollection.updateOne(filter, updateDoc);
+            res.json(result);
+
+        })
+
+        // finding the user is admin or not by email 
+        app.get('/users/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+            let isAdmin = false;
+            if (user.role === 'admin') {
+                isAdmin = true;
+            }
+            res.json({ admin: isAdmin });
+
+        })
+
 
     }
     finally {
@@ -134,7 +196,7 @@ async function run() {
 run().catch(console.dir);
 
 app.get('/', (req, res) => {
-    res.send('travel server is running!')
+    res.send('travelbd-tshirt server is running!')
 })
 
 app.listen(port, () => {
